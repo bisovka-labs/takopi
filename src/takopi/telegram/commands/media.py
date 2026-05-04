@@ -74,7 +74,7 @@ async def _handle_media_group(
             return
     if cfg.files.enabled and cfg.files.auto_put:
         caption_text = command_msg.text.strip()
-        if cfg.files.auto_put_mode == "prompt" and caption_text:
+        if cfg.files.auto_put_mode == "prompt":
             if resolve_prompt is None:
                 try:
                     resolved = cfg.runtime.resolve_message(

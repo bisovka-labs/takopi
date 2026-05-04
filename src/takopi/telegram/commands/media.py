@@ -99,6 +99,7 @@ async def _handle_media_group(
                 ordered,
                 resolved.context,
                 topic_store,
+                disambiguate=True,
             )
             if saved_group is None:
                 return

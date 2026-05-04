@@ -1503,6 +1503,7 @@ async def run_main_loop(
                     "",
                     resolved.context,
                     topic_store,
+                    disambiguate=True,
                 )
                 if saved is None:
                     return

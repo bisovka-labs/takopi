@@ -181,6 +181,19 @@ def _format_file_put_failures(failed: Sequence[_FilePutResult]) -> str | None:
     return f"failed: {errors}"
 
 
+def _disambiguate_path(target: Path, *, max_tries: int = 1000) -> Path | None:
+    if not target.exists():
+        return target
+    stem = target.stem
+    suffix = target.suffix
+    parent = target.parent
+    for n in range(1, max_tries + 1):
+        candidate = parent / f"{stem}-{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+    return None
+
+
 async def _save_document_payload(
     cfg: TelegramBridgeConfig,
     *,
@@ -189,6 +202,7 @@ async def _save_document_payload(
     rel_path: Path | None,
     base_dir: Path | None,
     force: bool,
+    disambiguate: bool = False,
 ) -> _FilePutResult:
     name = default_upload_name(document.file_name, None)
     if (
@@ -244,12 +258,25 @@ async def _save_document_payload(
                 error="upload target is a directory.",
             )
         if not force:
-            return _FilePutResult(
-                name=name,
-                rel_path=None,
-                size=None,
-                error="file already exists; use --force to overwrite.",
-            )
+            if disambiguate:
+                disambiguated = _disambiguate_path(target)
+                if disambiguated is None:
+                    return _FilePutResult(
+                        name=name,
+                        rel_path=None,
+                        size=None,
+                        error="too many name collisions; please prune the uploads dir.",
+                    )
+                target = disambiguated
+                resolved_path = resolved_path.with_name(target.name)
+                name = target.name
+            else:
+                return _FilePutResult(
+                    name=name,
+                    rel_path=None,
+                    size=None,
+                    error="file already exists; use --force to overwrite.",
+                )
     payload = await cfg.bot.download_file(file_path)
     if payload is None:
         return _FilePutResult(
@@ -315,6 +342,8 @@ async def _save_file_put(
     args_text: str,
     ambient_context: RunContext | None,
     topic_store: TopicStateStore | None,
+    *,
+    disambiguate: bool = False,
 ) -> _SavedFilePut | None:
     reply = make_reply(cfg, msg)
     document = msg.document
@@ -345,6 +374,7 @@ async def _save_file_put(
         rel_path=rel_path,
         base_dir=base_dir,
         force=plan.force,
+        disambiguate=disambiguate,
     )
     if result.error is not None:
         await reply(text=result.error)
@@ -441,6 +471,8 @@ async def _save_file_put_group(
     messages: Sequence[TelegramIncomingMessage],
     ambient_context: RunContext | None,
     topic_store: TopicStateStore | None,
+    *,
+    disambiguate: bool = False,
 ) -> _SavedFilePutGroup | None:
     reply = make_reply(cfg, msg)
     documents = [item.document for item in messages if item.document is not None]
@@ -474,6 +506,7 @@ async def _save_file_put_group(
             rel_path=None,
             base_dir=base_dir,
             force=plan.force,
+            disambiguate=disambiguate,
         )
         if result.error is None:
             saved.append(result)
